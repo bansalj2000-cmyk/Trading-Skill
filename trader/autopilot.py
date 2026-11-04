@@ -172,12 +172,15 @@ def chart(sym, rng="1d"):
 
 
 def news_flag(sym):
-    """A headline in the last 20 hours that says earnings, a halt, an offering or a deal."""
+    """A headline in the last 20 hours that says earnings, a halt, an offering or a deal.
+    Returns the reason to skip the stock, or None. A failed news request is a reason to skip."""
     since = (utcnow() - datetime.timedelta(hours=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         doc = api("GET", "%s/v1beta1/news?symbols=%s&start=%s&limit=20" % (DATA_URL, sym, since))
-    except ApiError:
-        return None
+    except ApiError as e:
+        return "news check failed (%s), skipped to be safe" % e  # fail closed: no news, no trade
+    if not isinstance(doc, dict) or not isinstance(doc.get("news"), list):
+        return "news check returned nothing readable, skipped to be safe"
     for n in doc.get("news", []):
         if len(n.get("symbols") or []) > 3:
             continue  # a roundup or sector story, not news about this stock
@@ -270,9 +273,17 @@ def portfolio(cfg):
         rows.append({"symbol": p["symbol"], "shares": float(p["qty"]),
                      "lots": [{"shares": float(p["qty"]), "cost": abs(float(p.get("cost_basis") or mv))}]})
         prices[p["symbol"]] = float(p.get("current_price") or 0)
+    planned = {r.get("client_order_id"): r.get("entry_plan") for r in read_trades()}
     for o in trade("GET", "/orders?status=open&nested=true&limit=200") or []:
-        if o.get("side") == "buy" and float(o.get("filled_qty") or 0) == 0:
-            used += float(o.get("qty") or 0) * float(o.get("limit_price") or prices.get(o["symbol"]) or 0)
+        if o.get("side") != "buy":
+            continue
+        left = float(o.get("qty") or 0) - float(o.get("filled_qty") or 0)
+        if left <= 0:
+            continue
+        # a pending market buy has no limit price: count it at the price it was planned at
+        # (the breakout hit price), or the position's price, or, unknown, as a full max order
+        px = float(o.get("limit_price") or planned.get(o.get("client_order_id")) or prices.get(o["symbol"]) or 0)
+        used += left * px if px > 0 else float(cfg.get("max_order_usd") or cfg["budget"])
     return {"cash": round(budget - used, 2), "positions": rows}, prices, positions
 
 
