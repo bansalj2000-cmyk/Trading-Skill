@@ -111,7 +111,9 @@ def events(day, limit=25):
         if d != day and ny > "17:00":
             continue
         kind, title, detail = explain(msg)
-        out.append({"ny": ny, "syd": syd, "kind": kind, "title": title, "detail": detail})
+        m2 = re.match(r"^(?:PLACED )?([A-Z]{1,5}) ", msg)
+        out.append({"ny": h12(ny), "syd": h12(syd), "kind": kind, "title": title, "detail": detail,
+                    "sym": m2.group(1) if m2 and kind in ("buy", "skip", "block", "sell") else None})
     # fold the long runs of "scanned" lines into the latest one
     folded = []
     for e in out:
@@ -121,6 +123,54 @@ def events(day, limit=25):
         else:
             folded.append(e)
     return folded[-limit:][::-1]
+
+
+# ---------------------------------------------------------------- names, 12-hour times, history
+
+NAMES = {}
+CLEAN = re.compile(r"\s+(Common Stock|Ordinary Shares|Class [A-C] Common Stock|Class [A-C]|American Depositary Shares.*|"
+                   r"Inc\.?|Corporation|Corp\.?|Company|Co\.?|Holdings?|Ltd\.?|plc|N\.V\.|S\.A\.)$", re.I)
+
+
+def name_of(sym):
+    """Plain company or fund name, and a kind: stock, fund, or leveraged fund."""
+    if sym not in NAMES:
+        try:
+            raw = ap.trade("GET", "/assets/%s" % sym).get("name") or sym
+        except Exception:
+            raw = sym
+        raw = raw.replace("Direxion Shares ETF Trust ", "").replace("ProShares Trust II ", "")
+        name = raw.strip()
+        for _ in range(3):
+            name = CLEAN.sub("", name).strip(" ,")
+        low = raw.lower()
+        if re.search(r"\b(2x|3x|ultra|ultrapro|bull|bear|leveraged|inverse)\b", low):
+            kind = "Leveraged fund: moves 2 to 3 times faster than what it tracks"
+        elif re.search(r"\b(etf|fund|trust|spdr|ishares)\b", low):
+            kind = "Fund: a basket of many stocks in one"
+        else:
+            kind = "Company stock"
+        NAMES[sym] = {"name": name or sym, "kind": kind}
+    return NAMES[sym]
+
+
+def h12(hhmm):
+    h, m = int(hhmm[:2]), hhmm[3:5]
+    return "%d:%s %s" % (h % 12 or 12, m, "AM" if h < 12 else "PM")
+
+
+def history():
+    try:
+        doc = ap.trade("GET", "/account/portfolio/history?period=1D&timeframe=5Min&intraday_reporting=market_hours")
+    except Exception:
+        return []
+    # measured from the first point of the session, so it reads as today's profit or loss
+    # (the paper API's equity and profit_loss fields carry an offset; their changes are right)
+    pts = [(int(t), float(v)) for t, v in zip(doc.get("timestamp") or [], doc.get("equity") or []) if v is not None]
+    if not pts:
+        return []
+    first = pts[0][1]
+    return [[t, round(v - first, 2)] for t, v in pts]
 
 
 # ---------------------------------------------------------------- state
@@ -194,7 +244,14 @@ def build():
         running = (time.time() - os.path.getmtime(ap.LOG)) < 420
     except OSError:
         running = False
+    syms = {r["symbol"] for r in open_rows} | {c["symbol"] for c in closed}
+    evs = events(day.isoformat())
+    syms |= {e["sym"] for e in evs if e.get("sym")}
+    names = {x: name_of(x) for x in sorted(syms)}
     return {
+        "names": names, "history": history(), "equity": round(float(acct["equity"]), 2),
+        "practice_start": float(cfg["budget"]), "practice_balance": round(float(cfg["budget"]) + day_change, 2),
+        "invested": round(sum(r["qty"] * r["price"] for r in open_rows), 2),
         "updated_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "now_ny": now_et.strftime("%H:%M:%S"), "now_syd": ap.sydney(now).strftime("%a %H:%M:%S"),
         "market_open": bool(clock.get("is_open")), "running": running,
         "day_change": round(day_change, 2), "realized": round(realized, 2),
@@ -202,7 +259,7 @@ def build():
         "trades": len(state["orders"]), "max_trades": cfg["max_trades_per_day"], "wins": wins, "losses": losses,
         "risk_used": risk_used, "daily_limit": cfg["max_daily_loss_usd"], "per_trade": cfg["max_loss_per_trade_usd"],
         "budget": cfg["budget"], "open": sorted(open_rows, key=lambda r: -r["pnl"]), "closed": closed,
-        "events": events(day.isoformat()), "marks": marks,
+        "events": evs, "marks": marks,
     }
 
 
