@@ -410,7 +410,15 @@ def flatten():
         trade("DELETE", "/orders")
     except ApiError as e:
         log("cancel all: %s" % e)
-    time.sleep(2)
+    # wait for the bracket legs to finish cancelling: until then they hold the shares and
+    # Alpaca refuses the closing sell ("insufficient qty available")
+    for _ in range(15):
+        time.sleep(1)
+        try:
+            if not trade("GET", "/orders?status=open&limit=200"):
+                break
+        except ApiError:
+            pass
     for attempt in range(5):
         pos = trade("GET", "/positions") or []
         if not pos:
