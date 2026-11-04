@@ -1,4 +1,5 @@
 trader/*
 !trader/config.json
 !trader/autopilot.py
+!trader/dashboard.py
 __pycache__/
