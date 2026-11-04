@@ -189,13 +189,13 @@ def build():
                             ("Sell everything", cfg["flat_by"]), ("Close", sess[1].strftime("%H:%M"))):
             u = et(hhmm)
             marks.append({"label": label, "ny": hhmm, "syd": ap.sydney(u).strftime("%H:%M"),
-                          "in_min": round((u - now).total_seconds() / 60)})
+                          "in_min": round((u - now).total_seconds() / 60), "utc": u.strftime("%Y-%m-%dT%H:%M:%SZ")})
     try:
         running = (time.time() - os.path.getmtime(ap.LOG)) < 420
     except OSError:
         running = False
     return {
-        "now_ny": now_et.strftime("%H:%M:%S"), "now_syd": ap.sydney(now).strftime("%a %H:%M:%S"),
+        "updated_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "now_ny": now_et.strftime("%H:%M:%S"), "now_syd": ap.sydney(now).strftime("%a %H:%M:%S"),
         "market_open": bool(clock.get("is_open")), "running": running,
         "day_change": round(day_change, 2), "realized": round(realized, 2),
         "unrealized": round(sum(r["pnl"] for r in open_rows), 2), "aud": rate,
