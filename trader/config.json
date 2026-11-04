@@ -1,10 +1,10 @@
 {
-  "budget": 1000,
+  "budget": 2000,
   "cash_buffer_pct": 10,
   "max_position_pct": 90,
-  "max_order_usd": 900,
+  "max_order_usd": 1800,
   "min_order_usd": 5,
-  "max_loss_per_trade_usd": 5,
+  "max_loss_per_trade_usd": 10,
   "max_daily_loss_usd": 100,
   "max_trades_per_day": 20,
   "max_orders_per_day": 45,
