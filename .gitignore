@@ -1,2 +1,3 @@
-trader/
+trader/*
+!trader/config.json
 __pycache__/
