@@ -185,7 +185,7 @@ def build():
     positions = ap.trade("GET", "/positions") or []
     plans = {}
     for r in ap.read_trades():
-        if r.get("date") == day.isoformat():
+        if r.get("date") == day.isoformat() and not r.get("failed"):
             plans[r["symbol"]] = r
     open_rows = []
     for p in positions:

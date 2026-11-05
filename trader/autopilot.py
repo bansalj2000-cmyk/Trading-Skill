@@ -362,6 +362,7 @@ def cycle(cfg, day, now_utc, symbols, dry=False, rng="1d"):
             return "halted: today's change is %s, at the %s daily loss limit" % (
                 size.money(change), size.money(float(cfg["max_daily_loss_usd"])))
         state, traded = book(day)
+        traded |= {r["symbol"] for r in read_trades() if r.get("date") == day.isoformat()}
         if len(state["orders"]) >= int(cfg["max_trades_per_day"]):
             return "done: %d trades placed today, the daily limit" % len(state["orders"])
         port, prices, _ = portfolio(cfg)
@@ -402,7 +403,9 @@ def cycle(cfg, day, now_utc, symbols, dry=False, rng="1d"):
         try:
             placed = trade("POST", "/orders", rest_body(order, cid))
         except ApiError as e:
-            log("%s order FAILED, not retried: %s" % (sym, e))
+            # remember the symbol so no later cycle today tries it again (a halt, a rejection)
+            save_trade({"date": day.isoformat(), "symbol": sym, "failed": True, "error": str(e)[:200]})
+            log("%s order FAILED, not retried today: %s" % (sym, e))
             return "order failed"
         save_trade({"date": day.isoformat(), "symbol": sym, "qty": int(order["qty"]), "entry_plan": s["entry"],
                     "stop": s["stop"], "target": s["target"], "max_loss": s["max_loss"],
@@ -460,7 +463,7 @@ def fills(day):
 
 
 def report(day):
-    plans = {r["symbol"]: r for r in read_trades() if r.get("date") == day.isoformat()}
+    plans = {r["symbol"]: r for r in read_trades() if r.get("date") == day.isoformat() and not r.get("failed")}
     by = {}
     for f in fills(day):
         d = by.setdefault(f["symbol"], {"buy_q": 0.0, "buy_v": 0.0, "sell_q": 0.0, "sell_v": 0.0, "last": ""})
