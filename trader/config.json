@@ -10,7 +10,7 @@
   "max_orders_per_day": 45,
   "min_reward_risk": 1.5,
   "require_stop": true,
-  "no_entries_before": "09:45",
+  "no_entries_before": "10:00",
   "no_entries_after": "15:30",
   "flat_by": "15:55",
   "fractional": false,

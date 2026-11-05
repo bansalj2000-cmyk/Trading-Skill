@@ -36,6 +36,7 @@ import datetime
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -152,6 +153,21 @@ def today_orders(day):
 
 # ---------------------------------------------------------------- market data
 
+LEVERAGED = re.compile(r"\b(2x|3x|-2x|-3x|ultra|ultrapro|ultrashort|bull|bear|leveraged|inverse|short)\b", re.I)
+_KIND = {}
+
+
+def leveraged(sym):
+    """True for leveraged or inverse funds (they move 2 to 3 times as fast), by Alpaca's asset name."""
+    if sym not in _KIND:
+        try:
+            name = trade("GET", "/assets/%s" % sym).get("name") or ""
+        except ApiError:
+            name = ""
+        _KIND[sym] = bool(LEVERAGED.search(name))
+    return _KIND[sym]
+
+
 def universe():
     syms = []
     for by in ("volume", "trades"):
@@ -162,7 +178,7 @@ def universe():
             log("screener failed (%s); using the fallback list" % e)
     out = []
     for s in syms + FALLBACK:
-        if s not in out and scan.TICKER.match(s):
+        if s not in out and scan.TICKER.match(s) and not leveraged(s):
             out.append(s)
     return out
 
@@ -557,7 +573,8 @@ def run(a):
     if sess[1] < datetime.time(16, 0):
         flat = (datetime.datetime.combine(day, sess[1]) - datetime.timedelta(minutes=5)).time()
     flat_u = et(flat)
-    first_u = open_u + datetime.timedelta(minutes=OR_MINUTES + 5, seconds=25)
+    first_u = max(open_u + datetime.timedelta(minutes=OR_MINUTES + 5),
+                  et(scan.parse_hhmm(cfg.get("no_entries_before", "09:45")))) + datetime.timedelta(seconds=25)
     last_u = et(scan.parse_hhmm(cfg.get("no_entries_after", "15:30")))
     if a.dry_run:
         log("DRY RUN: nothing will be sent")
