@@ -220,8 +220,8 @@ def build():
         pnl = round(d["sv"] - d["bv"], 2)
         pl = plans.get(sym, {})
         ex = d["sv"] / d["sq"]
-        how = "hit target" if pl.get("target") and ex >= pl["target"] * 0.9975 else \
-              "hit stop" if pl.get("stop") and ex <= pl["stop"] * 1.0025 else "closed at end of day"
+        how = "hit target" if pl.get("target") and ex >= pl["target"] - min(pl["target"] * 0.0025, 0.25 * (pl["target"] - pl["stop"]) / 3) else \
+              "hit stop" if pl.get("stop") and ex <= pl["stop"] + min(pl["stop"] * 0.0025, 0.25 * (pl["target"] - pl["stop"]) / 3) else "closed at end of day"
         closed.append({"symbol": sym, "qty": d["bq"], "entry": d["bv"] / d["bq"], "exit": ex, "pnl": pnl, "how": how})
         realized += pnl
         wins += pnl > 0

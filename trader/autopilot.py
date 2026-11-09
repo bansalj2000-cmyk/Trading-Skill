@@ -486,9 +486,9 @@ def report(day):
         stop, target = pl.get("stop"), pl.get("target")
         if pnl is None:
             how = "STILL OPEN"
-        elif target and exit_ >= target * 0.9975:
+        elif target and exit_ >= target - min(target * 0.0025, 0.25 * (target - (stop or 0)) / 3):
             how = "hit target"
-        elif stop and exit_ <= stop * 1.0025:
+        elif stop and exit_ <= stop + min(stop * 0.0025, 0.25 * ((target or stop) - stop) / 3):
             how = "hit stop"
         else:
             how = "closed at flat-by"
